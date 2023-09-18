@@ -26,8 +26,6 @@ func init() {
 		log.Fatalf("error creating Discord session: %v", err)
 	}
 
-	log.Println("Created session")
-
 	session.Identify.Intents = discordgo.IntentsGuildMessages
 }
 
