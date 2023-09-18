@@ -1,8 +1,7 @@
 package main
 
 import (
-	"encoding/json"
-	"fmt"
+	"discord-remind-o-tron/commandhandlers"
 	"log"
 	"os"
 	"os/signal"
@@ -11,19 +10,29 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-func main() {
-	var (
-		Token   = os.Getenv("TOKEN")
-		appID   = os.Getenv("APPID")
-		guildID = os.Getenv("GUILDID")
-	)
+var (
+	Token   = os.Getenv("TOKEN")
+	GuildID = os.Getenv("GUILDID")
+)
 
-	session, err := discordgo.New("Bot " + Token)
+var commands []*discordgo.ApplicationCommand
+var commandHandlers map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
+var session *discordgo.Session
+
+func init() {
+	var err error
+	session, err = discordgo.New("Bot " + Token)
 	if err != nil {
 		log.Fatalf("error creating Discord session: %v", err)
 	}
 
-	_, err = session.ApplicationCommandBulkOverwrite(appID, guildID, []*discordgo.ApplicationCommand{
+	log.Println("Created session")
+
+	session.Identify.Intents = discordgo.IntentsGuildMessages
+}
+
+func init() {
+	commands = []*discordgo.ApplicationCommand{
 		{
 			Name:        "remind",
 			Description: "Set a Reminder",
@@ -51,18 +60,37 @@ func main() {
 				},
 			},
 		},
-	})
-	if err != nil {
-		log.Fatalf("error creating Discord commands: %v", err)
 	}
 
-	session.AddHandler(interactionCreate)
+	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+		"remind": commandhandlers.Remind,
+	}
+}
 
-	session.Identify.Intents = discordgo.IntentsGuildMessages
+func init() {
+	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		log.Println("Adding")
+		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+			h(s, i)
+		}
+	})
+}
 
-	err = session.Open()
+func main() {
+	session.AddHandler(func(s *discordgo.Session, r *discordgo.Ready) {
+		log.Printf("Logged in as: %v#%v", s.State.User.Username, s.State.User.Discriminator)
+	})
+
+	err := session.Open()
 	if err != nil {
 		log.Fatalf("error opening connection: %v", err)
+	}
+
+	for _, v := range commands {
+		_, err := session.ApplicationCommandCreate(session.State.User.ID, GuildID, v)
+		if err != nil {
+			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
+		}
 	}
 
 	defer session.Close()
@@ -72,25 +100,4 @@ func main() {
 	<-sc
 
 	log.Println("Shutting down...")
-}
-
-func interactionCreate(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	data := i.ApplicationCommandData()
-	str, _ := json.MarshalIndent(data, "", "\t")
-	fmt.Println(string(str))
-	switch data.Name {
-	case "remind":
-		err := s.InteractionRespond(
-			i.Interaction,
-			&discordgo.InteractionResponse{
-				Type: discordgo.InteractionResponseChannelMessageWithSource,
-				Data: &discordgo.InteractionResponseData{
-					Content: "K",
-				},
-			},
-		)
-		if err != nil {
-			fmt.Println(err)
-		}
-	}
 }
