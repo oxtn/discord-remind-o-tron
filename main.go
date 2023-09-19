@@ -11,8 +11,7 @@ import (
 )
 
 var (
-	Token   = os.Getenv("TOKEN")
-	GuildID = os.Getenv("GUILDID")
+	Token = os.Getenv("TOKEN")
 )
 
 var commands []*discordgo.ApplicationCommand
@@ -67,9 +66,8 @@ func init() {
 
 func init() {
 	session.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
-		log.Println("Adding")
-		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
-			h(s, i)
+		if handler, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+			handler(s, i)
 		}
 	})
 }
@@ -85,7 +83,7 @@ func main() {
 	}
 
 	for _, v := range commands {
-		_, err := session.ApplicationCommandCreate(session.State.User.ID, GuildID, v)
+		_, err := session.ApplicationCommandCreate(session.State.User.ID, "", v)
 		if err != nil {
 			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
 		}
