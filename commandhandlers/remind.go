@@ -26,13 +26,13 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 
 	log.Printf("Scheduling for: %v", when)
 
-	targetId := resolveTarget(s, i, optionMap)
+	target := resolveTarget(s, i, optionMap)
 	message := optionMap["message"].StringValue()
 	instant := time.Now().Add(when)
 
 	time.AfterFunc(when,
 		func() {
-			sendChannelMessage(s, targetId, message)
+			sendChannelMessage(s, target.ID, message)
 		})
 
 	err = s.InteractionRespond(
@@ -40,7 +40,7 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		&discordgo.InteractionResponse{
 			Type: discordgo.InteractionResponseChannelMessageWithSource,
 			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("I'll remind you about '%v' at %v.", message, instant.Format("January 2, 2006 at 3:04pm (MST)")),
+				Content: fmt.Sprintf("I'll remind %v about '%v' at %v.", target.FriendlyName, message, instant.Format("January 2, 2006 at 3:04pm (MST)")),
 				Flags:   discordgo.MessageFlagsEphemeral,
 			},
 		},
@@ -61,11 +61,12 @@ func sendChannelMessage(s *discordgo.Session, targetId string, message string) {
 	}
 }
 
-func resolveTarget(s *discordgo.Session, i *discordgo.InteractionCreate, options map[string]*discordgo.ApplicationCommandInteractionDataOption) string {
+func resolveTarget(s *discordgo.Session, i *discordgo.InteractionCreate, options map[string]*discordgo.ApplicationCommandInteractionDataOption) Target {
 	channel, ok := options["channel"]
 
 	if ok {
-		return channel.StringValue()
+		channel := channel.ChannelValue(nil)
+		return Target{ID: channel.ID, FriendlyName: fmt.Sprintf("<#%s>", channel.ID)}
 	}
 
 	userChannel, err := s.UserChannelCreate(i.Member.User.ID)
@@ -73,5 +74,10 @@ func resolveTarget(s *discordgo.Session, i *discordgo.InteractionCreate, options
 		log.Println(err)
 	}
 
-	return userChannel.ID
+	return Target{ID: userChannel.ID, FriendlyName: "you"}
+}
+
+type Target struct {
+	ID           string
+	FriendlyName string
 }
