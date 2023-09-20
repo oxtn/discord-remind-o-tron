@@ -1,6 +1,7 @@
 package commandhandlers
 
 import (
+	"discord-remind-o-tron/persistence"
 	"discord-remind-o-tron/util"
 	"fmt"
 	"log"
@@ -9,7 +10,19 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
+var (
+	db *persistence.RemindPersistence
+)
+
 func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if db == nil {
+		db = persistence.NewRemindPersistence()
+		err := db.Open()
+		if err != nil {
+			log.Fatalln(err)
+		}
+	}
+
 	data := i.ApplicationCommandData()
 	util.LogJson(i)
 
@@ -34,6 +47,13 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		func() {
 			sendChannelMessage(s, target.ID, message)
 		})
+
+	db.SaveReminder(&persistence.Reminder{
+		UserID:     i.Member.User.ID,
+		TargetID:   target.ID,
+		Reminder:   message,
+		RemindTime: instant.UTC(),
+	})
 
 	err = s.InteractionRespond(
 		i.Interaction,
