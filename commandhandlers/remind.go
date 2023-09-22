@@ -43,17 +43,20 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	message := optionMap["message"].StringValue()
 	instant := time.Now().Add(when)
 
+	var reminder = db.NewReminder(i.Member.User.ID, target.ID, message, instant.UTC())
+	reminder.Save()
+
 	time.AfterFunc(when,
 		func() {
-			sendChannelMessage(s, target.ID, message)
-		})
+			err = sendChannelMessage(s, target.ID, message)
 
-	db.SaveReminder(&persistence.Reminder{
-		UserID:     i.Member.User.ID,
-		TargetID:   target.ID,
-		Reminder:   message,
-		RemindTime: instant.UTC(),
-	})
+			if err == nil {
+				reminder.MarkSent()
+			} else {
+				reminder.MarkError()
+				log.Println(err)
+			}
+		})
 
 	err = s.InteractionRespond(
 		i.Interaction,
@@ -71,14 +74,12 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 }
 
-func sendChannelMessage(s *discordgo.Session, targetId string, message string) {
+func sendChannelMessage(s *discordgo.Session, targetId string, message string) error {
 	log.Printf("Sending %v to %v", message, targetId)
 
 	_, err := s.ChannelMessageSend(targetId, message)
 
-	if err != nil {
-		log.Println(err)
-	}
+	return err
 }
 
 func resolveTarget(s *discordgo.Session, i *discordgo.InteractionCreate, options map[string]*discordgo.ApplicationCommandInteractionDataOption) Target {

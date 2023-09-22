@@ -8,12 +8,23 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
+type ReminderStatus int
+
+const (
+	ReminderStatusUnknown   ReminderStatus = 0
+	ReminderStatusScheduled ReminderStatus = 1
+	ReminderStatusSent      ReminderStatus = 2
+	ReminderStatusError     ReminderStatus = 3
+)
+
+var ErrReminderNotNew = errors.New("reminder already exists")
 var ErrDBAlreadyOpen = errors.New("database already opened")
 
 type RemindPersistence struct {
 	db *sql.DB
 
-	stInsert *sql.Stmt
+	stInsert       *sql.Stmt
+	stUpdateStatus *sql.Stmt
 }
 
 func NewRemindPersistence() *RemindPersistence {
@@ -56,6 +67,11 @@ func (p *RemindPersistence) Open() error {
 		return err
 	}
 
+	p.stUpdateStatus, err = p.db.Prepare("UPDATE reminders SET Status = ? WHERE Id = ?")
+	if err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -74,14 +90,57 @@ func (p *RemindPersistence) Close() error {
 }
 
 type Reminder struct {
+	Id         int64
 	UserID     string
 	TargetID   string
 	Reminder   string
 	RemindTime time.Time
+
+	persistence *RemindPersistence
 }
 
-func (p *RemindPersistence) SaveReminder(r *Reminder) error {
-	_, err := p.stInsert.Exec(r.UserID, r.TargetID, r.Reminder, r.RemindTime, 1)
+func (p *RemindPersistence) NewReminder(UserID string, TargetID string, Text string, RemindTime time.Time) *Reminder {
+
+	return &Reminder{
+		Id:         0,
+		UserID:     UserID,
+		TargetID:   TargetID,
+		Reminder:   Text,
+		RemindTime: RemindTime,
+
+		persistence: p,
+	}
+}
+
+func (r *Reminder) Save() error {
+	if r.Id != 0 {
+		return ErrReminderNotNew
+	}
+
+	result, err := r.persistence.stInsert.Exec(r.UserID, r.TargetID, r.Reminder, r.RemindTime, ReminderStatusScheduled)
+	if err != nil {
+		return err
+	}
+
+	r.Id, err = result.LastInsertId()
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Reminder) MarkSent() error {
+	_, err := r.persistence.stUpdateStatus.Exec(ReminderStatusSent, r.Id)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (r *Reminder) MarkError() error {
+	_, err := r.persistence.stUpdateStatus.Exec(ReminderStatusError, r.Id)
 	if err != nil {
 		return err
 	}
