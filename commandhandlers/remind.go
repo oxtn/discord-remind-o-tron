@@ -2,7 +2,6 @@ package commandhandlers
 
 import (
 	"discord-remind-o-tron/persistence"
-	"discord-remind-o-tron/util"
 	"fmt"
 	"log"
 	"time"
@@ -24,7 +23,6 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	data := i.ApplicationCommandData()
-	util.LogJson(i)
 
 	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(data.Options))
 	for _, opt := range data.Options {
