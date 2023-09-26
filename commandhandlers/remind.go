@@ -9,19 +9,30 @@ import (
 	"github.com/bwmarrin/discordgo"
 )
 
-var (
-	db *persistence.RemindPersistence
-)
+type Remind struct {
+	db         *persistence.RemindPersistence
+	background *RemindBackground
+}
 
-func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
-	if db == nil {
-		db = persistence.NewRemindPersistence()
-		err := db.Open()
-		if err != nil {
-			log.Fatalln(err)
-		}
+func NewRemind() (*Remind, error) {
+	db := persistence.NewRemindPersistence()
+	err := db.Open()
+	if err != nil {
+		return nil, err
 	}
 
+	background, err := NewRemindBackground(db)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Remind{
+		db:         db,
+		background: background,
+	}, nil
+}
+
+func (r *Remind) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	data := i.ApplicationCommandData()
 
 	optionMap := make(map[string]*discordgo.ApplicationCommandInteractionDataOption, len(data.Options))
@@ -41,7 +52,7 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	message := optionMap["message"].StringValue()
 	instant := time.Now().Add(when)
 
-	var reminder = db.NewReminder(i.Member.User.ID, target.ID, message, instant.UTC())
+	var reminder = r.db.NewReminder(i.Member.User.ID, target.ID, message, instant.UTC())
 	reminder.Save()
 
 	time.AfterFunc(when,
@@ -70,6 +81,20 @@ func Remind(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	if err != nil {
 		log.Println(err)
 	}
+}
+
+func (r *Remind) Start() {
+	r.background.PerformReminders()
+}
+
+func (r *Remind) Close() error {
+	r.background.FinishPerformReminders()
+
+	err := r.db.Close()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func sendChannelMessage(s *discordgo.Session, targetId string, message string) error {

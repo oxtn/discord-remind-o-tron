@@ -14,6 +14,7 @@ var (
 	Token = os.Getenv("TOKEN")
 )
 
+var remindHandler *commandhandlers.Remind
 var commands []*discordgo.ApplicationCommand
 var commandHandlers map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate)
 var session *discordgo.Session
@@ -59,8 +60,14 @@ func init() {
 		},
 	}
 
+	var err error
+	remindHandler, err = commandhandlers.NewRemind()
+	if err != nil {
+		log.Fatalln(err)
+	}
+
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
-		"remind": commandhandlers.Remind,
+		"remind": remindHandler.Handler,
 	}
 }
 
@@ -90,6 +97,9 @@ func main() {
 	}
 
 	defer session.Close()
+	defer remindHandler.Close()
+
+	go remindHandler.Start()
 
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)

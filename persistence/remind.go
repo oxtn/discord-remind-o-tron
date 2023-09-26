@@ -37,6 +37,10 @@ func NewRemindPersistence() *RemindPersistence {
 	return &RemindPersistence{}
 }
 
+func (p *RemindPersistence) IsOpen() bool {
+	return p.db != nil
+}
+
 func (p *RemindPersistence) Open() error {
 	var err error
 
