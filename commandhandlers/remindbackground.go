@@ -6,23 +6,27 @@ import (
 	"errors"
 	"log"
 	"time"
+
+	"github.com/bwmarrin/discordgo"
 )
 
 var ErrDBNotOpen = errors.New("database not already opened")
 
 type RemindBackground struct {
 	db *persistence.RemindPersistence
+	s  *discordgo.Session
 
 	context context.Context
 	cancel  context.CancelFunc
 }
 
-func NewRemindBackground(db *persistence.RemindPersistence) (*RemindBackground, error) {
+func NewRemindBackground(db *persistence.RemindPersistence, s *discordgo.Session) (*RemindBackground, error) {
 	if !db.IsOpen() {
 		return nil, ErrDBNotOpen
 	}
 
 	return &RemindBackground{
+		s:  s,
 		db: db,
 	}, nil
 }
@@ -51,15 +55,26 @@ func (r *RemindBackground) PerformReminders() {
 			log.Println("Stopping Reminders...")
 			return
 		case <-ticker.C:
-			rows, err := r.db.FetchScheduledWithinMinutes(5, 20)
+			reminders, err := r.db.FetchScheduledWithinMinutes(5, 20)
 			if err != nil {
 				log.Print(err)
 			}
 
-			for _, row := range rows {
-				log.Println(row)
+			for _, reminder := range reminders {
+				processReminder(r, reminder)
 			}
 
 		}
+	}
+}
+
+func processReminder(r *RemindBackground, reminder *persistence.Reminder) {
+	err := sendChannelMessage(r.s, reminder.TargetID, reminder.Reminder)
+
+	if err == nil {
+		reminder.MarkSent()
+	} else {
+		reminder.MarkError()
+		log.Println(err)
 	}
 }

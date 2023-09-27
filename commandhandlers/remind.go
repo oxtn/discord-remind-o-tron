@@ -14,14 +14,14 @@ type Remind struct {
 	background *RemindBackground
 }
 
-func NewRemind() (*Remind, error) {
+func NewRemind(s *discordgo.Session) (*Remind, error) {
 	db := persistence.NewRemindPersistence()
 	err := db.Open()
 	if err != nil {
 		return nil, err
 	}
 
-	background, err := NewRemindBackground(db)
+	background, err := NewRemindBackground(db, s)
 	if err != nil {
 		return nil, err
 	}
@@ -40,9 +40,13 @@ func (r *Remind) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		optionMap[opt.Name] = opt
 	}
 
-	when, err := time.ParseDuration(optionMap["when"].StringValue())
+	whenStr := optionMap["when"].StringValue()
+	when, err := time.ParseDuration(whenStr)
 	if err != nil {
 		log.Println(err)
+
+		response := fmt.Sprintf(":x: Your provided time of '%v' wasn't recognized.", whenStr)
+		respondInteraction(s, i, response, true)
 		return
 	}
 
@@ -55,32 +59,8 @@ func (r *Remind) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	var reminder = r.db.NewReminder(i.Member.User.ID, target.ID, message, instant.UTC())
 	reminder.Save()
 
-	time.AfterFunc(when,
-		func() {
-			err = sendChannelMessage(s, target.ID, message)
-
-			if err == nil {
-				reminder.MarkSent()
-			} else {
-				reminder.MarkError()
-				log.Println(err)
-			}
-		})
-
-	err = s.InteractionRespond(
-		i.Interaction,
-		&discordgo.InteractionResponse{
-			Type: discordgo.InteractionResponseChannelMessageWithSource,
-			Data: &discordgo.InteractionResponseData{
-				Content: fmt.Sprintf("I'll remind %v about '%v' at %v.", target.FriendlyName, message, instant.Format("January 2, 2006 at 3:04pm (MST)")),
-				Flags:   discordgo.MessageFlagsEphemeral,
-			},
-		},
-	)
-
-	if err != nil {
-		log.Println(err)
-	}
+	response := fmt.Sprintf("I'll remind %v about '%v' at %v.", target.FriendlyName, message, instant.Format("January 2, 2006 at 3:04pm (MST)"))
+	respondInteraction(s, i, response, true)
 }
 
 func (r *Remind) Start() {
@@ -103,6 +83,28 @@ func sendChannelMessage(s *discordgo.Session, targetId string, message string) e
 	_, err := s.ChannelMessageSend(targetId, message)
 
 	return err
+}
+
+func respondInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, content string, ephemeral bool) {
+	var flags discordgo.MessageFlags
+	if ephemeral {
+		flags = discordgo.MessageFlagsEphemeral
+	}
+
+	err := s.InteractionRespond(
+		i.Interaction,
+		&discordgo.InteractionResponse{
+			Type: discordgo.InteractionResponseChannelMessageWithSource,
+			Data: &discordgo.InteractionResponseData{
+				Content: content,
+				Flags:   flags,
+			},
+		},
+	)
+
+	if err != nil {
+		log.Println(err)
+	}
 }
 
 func resolveTarget(s *discordgo.Session, i *discordgo.InteractionCreate, options map[string]*discordgo.ApplicationCommandInteractionDataOption) Target {

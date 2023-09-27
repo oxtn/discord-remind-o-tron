@@ -160,6 +160,8 @@ func (p *RemindPersistence) FetchScheduledWithinMinutes(minutes int, maxResults 
 
 	for rows.Next() {
 		var row Reminder
+
+		row.persistence = p
 		if err := rows.Scan(&row.Id, &row.UserID, &row.TargetID, &row.Reminder, &row.RemindTime, &row.Status); err != nil {
 			return nil, err
 		}

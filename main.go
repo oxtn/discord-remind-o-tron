@@ -61,7 +61,7 @@ func init() {
 	}
 
 	var err error
-	remindHandler, err = commandhandlers.NewRemind()
+	remindHandler, err = commandhandlers.NewRemind(session)
 	if err != nil {
 		log.Fatalln(err)
 	}
