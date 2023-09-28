@@ -7,11 +7,13 @@ import (
 	"time"
 
 	"github.com/bwmarrin/discordgo"
+	"github.com/markusmobius/go-dateparser"
 )
 
 type Remind struct {
 	db         *persistence.RemindPersistence
 	background *RemindBackground
+	dtCfg      *dateparser.Configuration
 }
 
 func NewRemind(s *discordgo.Session) (*Remind, error) {
@@ -29,6 +31,7 @@ func NewRemind(s *discordgo.Session) (*Remind, error) {
 	return &Remind{
 		db:         db,
 		background: background,
+		dtCfg:      &dateparser.Configuration{PreferredDateSource: dateparser.Future},
 	}, nil
 }
 
@@ -41,7 +44,7 @@ func (r *Remind) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 	}
 
 	whenStr := optionMap["when"].StringValue()
-	when, err := time.ParseDuration(whenStr)
+	when, err := dateparser.Parse(r.dtCfg, whenStr)
 	if err != nil {
 		log.Println(err)
 
@@ -50,21 +53,26 @@ func (r *Remind) Handler(s *discordgo.Session, i *discordgo.InteractionCreate) {
 		return
 	}
 
+	if when.Time.Before(time.Now().UTC()) {
+		response := fmt.Sprintf(":x: Your provided time of '%v' is in the past.", whenStr)
+		respondInteraction(s, i, response, true)
+		return
+	}
+
 	log.Printf("Scheduling for: %v", when)
 
 	target := resolveTarget(s, i, optionMap)
 	message := optionMap["message"].StringValue()
-	instant := time.Now().Add(when)
 
-	var reminder = r.db.NewReminder(i.Member.User.ID, target.ID, message, instant.UTC())
+	var reminder = r.db.NewReminder(i.Member.User.ID, target.ID, message, when.Time.UTC())
 	reminder.Save()
 
-	response := fmt.Sprintf("I'll remind %v about '%v' at %v.", target.FriendlyName, message, instant.Format("January 2, 2006 at 3:04pm (MST)"))
+	response := fmt.Sprintf("I'll remind %v about '%v' at %v.", target.FriendlyName, message, when.Time.Format("January 2, 2006 at 3:04pm (MST)"))
 	respondInteraction(s, i, response, true)
 }
 
 func (r *Remind) Start() {
-	r.background.PerformReminders()
+	go r.background.PerformReminders()
 }
 
 func (r *Remind) Close() error {
