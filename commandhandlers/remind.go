@@ -10,6 +10,14 @@ import (
 	"github.com/markusmobius/go-dateparser"
 )
 
+type ChannelMessageSender interface {
+	ChannelMessageSend(targetId string, message string, options ...discordgo.RequestOption) (*discordgo.Message, error)
+}
+
+type DiscordInteractionResponder interface {
+	InteractionRespond(interaction *discordgo.Interaction, resp *discordgo.InteractionResponse, options ...discordgo.RequestOption) error
+}
+
 type Remind struct {
 	db         *persistence.RemindPersistence
 	background *RemindBackground
@@ -85,7 +93,7 @@ func (r *Remind) Close() error {
 	return nil
 }
 
-func sendChannelMessage(s *discordgo.Session, targetId string, message string) error {
+func sendChannelMessage(s ChannelMessageSender, targetId string, message string) error {
 	log.Printf("Sending %v to %v", message, targetId)
 
 	_, err := s.ChannelMessageSend(targetId, message)
@@ -93,7 +101,7 @@ func sendChannelMessage(s *discordgo.Session, targetId string, message string) e
 	return err
 }
 
-func respondInteraction(s *discordgo.Session, i *discordgo.InteractionCreate, content string, ephemeral bool) {
+func respondInteraction(s DiscordInteractionResponder, i *discordgo.InteractionCreate, content string, ephemeral bool) {
 	var flags discordgo.MessageFlags
 	if ephemeral {
 		flags = discordgo.MessageFlagsEphemeral

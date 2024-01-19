@@ -14,7 +14,7 @@ var ErrDBNotOpen = errors.New("database not already opened")
 
 type RemindBackground struct {
 	db *persistence.RemindPersistence
-	s  *discordgo.Session
+	s  ChannelMessageSender
 
 	context context.Context
 	cancel  context.CancelFunc
